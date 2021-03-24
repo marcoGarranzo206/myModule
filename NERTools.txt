@@ -1,9 +1,0 @@
-chemTok: tokenizer for chemical entities 	https://www.hindawi.com/journals/bmri/2016/4248026/
-biolemmatizer: lemmatizer for biomedical entities	https://sourceforge.net/projects/biolemmatizer/
-drNER: rule based NER for KE of dietary recomendations	https://www.ncbi.nlm.nih.gov/pmc/articles/PMC5482438/
-chemical entity mention in patents (CEMP): training set of 21000 patent abstracts for NER of chemical entities	
-ChemListem: a chemical entiyty NER	https://jcheminf.biomedcentral.com/articles/10.1186/s13321-018-0313-8
-ChemicalTagger
-CheNER
-MetaMap
-PharmacoNER

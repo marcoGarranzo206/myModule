@@ -64,7 +64,9 @@ class oneClassNER_evaluator:
     def FP_terms(self):
 
         """
-        incorrect classifcation due to word polysemy
+        incorrect classifcation 
+        Might be due to word polysemy if using 
+        a dictionary.
         
         Given a set of entity names
         Find which entity names were incorrectly classified

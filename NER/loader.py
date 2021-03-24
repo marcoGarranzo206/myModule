@@ -1,7 +1,8 @@
 import en_core_web_sm
+from collections import defaultdict
 from itertools import groupby
 from myModule.functions import full_listdir
-from myModule.evaluate_DDI import extract_DDI_corpus
+from myModule.evaluate_DDI_2 import extract_DDI_corpus
 nlp = en_core_web_sm.load()
 import tokenizations
 import numpy as np
@@ -115,9 +116,18 @@ def groupDatasets(x, projection):
 def tokenize_DDICorpus(text,outputs, sentence_tokenizer, word_tokenizer):
     
     """
-    outputs: list of tuples:
+    entities: list of tuples:
     
-        (start index, end index, NER type)
+        (id,start index, end index, NER type)
+
+    interactions: list of tuples:
+
+        (interaction_id, type, id1,id2)
+
+    returns generator of tuples:
+
+        (tokenized sentences, labels, spans, tid_loc ) 
+        TODO: explain outputs
     """
     
     docs,spans = tokenize_span(text, sentence_tokenizer,word_tokenizer)
@@ -125,18 +135,18 @@ def tokenize_DDICorpus(text,outputs, sentence_tokenizer, word_tokenizer):
         for sentence,span in zip(docs,spans):
               
             labels = ["O" for _ in sentence]
-            yield sentence, labels,span
+            yield sentence, labels,span, dict()
     
     else:
         
         curr_label_idx = 0
-        curr_start, curr_end, curr_label = outputs[0]
+        tid, curr_label, name, curr_start, curr_end = outputs[0]
         started = False
 
 
         for sentence,span in zip(docs,spans):
 
-
+            tid_loc = dict()
             labels = [None for _ in sentence]
 
             for i,(token,(token_idx, end)) in enumerate(zip(sentence,span)):
@@ -146,22 +156,29 @@ def tokenize_DDICorpus(text,outputs, sentence_tokenizer, word_tokenizer):
 
                     started = False
                     curr_label_idx += 1
-                    curr_start, curr_end, curr_label = outputs[min(curr_label_idx,len(outputs)-1)]
+                    tid, curr_label, name, curr_start, curr_end = outputs[min(curr_label_idx,len(outputs)-1)]
 
-                if token_idx == curr_start:
+                if (token_idx >= curr_start) and (token_idx <= curr_end) and not (started):
 
                     started = True
-                    labels[i] = f"B-{curr_label}"
+                    tid_loc[tid] = i
+                    labels[i] = f"B-{curr_label}:{tid}"
 
                 elif token_idx < curr_end and started:
 
-                    labels[i] = f"I-{curr_label}"
+                    labels[i] = f"I-{curr_label}:{tid}"
 
                 else: 
 
                     labels[i] = "O"
 
-            yield sentence, labels, span
+            yield sentence, labels, span, tid_loc
+
+def groupFiles(root, start_index = 0):
+
+    files = full_listdir(root)
+    files = files[start_index:]
+    return groupDatasets(files, projectionDDI)
 
 def load_DDI(root,text_processor,sentence_tokenizer,word_tokenizer,start_index = 0):
 
@@ -173,25 +190,67 @@ def load_DDI(root,text_processor,sentence_tokenizer,word_tokenizer,start_index =
     start_index: for DB train, ignore first file
     """
 
-    files = sorted(full_listdir(root)[start_index:])
-    grouped = groupDatasets(files, projectionDDI)
+    files = groupFiles(root, start_index)
     sentences = []
-    outputs = []
-    spans = []
+    total_labels = []
+    interaction_ids = defaultdict(list) #key: sentence idx. values: list of pair of ids
+    j = 0 # sentence index
+    inters = [] # for debugging. will be removed if problem is solved
+    tot_spans = []
 
-    for text,output in extract_DDI_corpus(grouped):
-
-        #group,name,start,end = output
-        output_formatted = [(x[2],x[3],x[0]) for x in output]
+    for doc_id, (text,entities,interactions) in enumerate(extract_DDI_corpus(files)):
+        
         text = text_processor(text)
+        curr_interaction = 0
+        labels_found = 0
+        curr_sents = []
+        curr_labels = []
+        
+        if interactions:
+            
+            inters.append(interactions)
+            _,type_,arg1,arg2 = interactions[curr_interaction]
+            
+        else:
+            
+            type_,arg1,arg2 = "", "", ""
 
-        for tokens, labels, span in tokenize_DDICorpus(text,output_formatted, sentence_tokenizer, word_tokenizer):
+        
+        for sents,labels,spans,t_ids in tokenize_DDICorpus(text, entities,sentence_tokenizer,\
+                                        word_tokenizer):
 
-            sentences.append(tokens)
-            outputs.append(labels)
-            spans.append(span)
+            labels_found +=  sum([1 if label[0] == "B" else 0 for label in labels ])#for debugging
+            sentences.append(sents)
+            total_labels.append(labels)
+            tot_spans.append(spans)
+            #curr_sents.append( [ (t,l,s)for (t,l,s) in zip(sents, labels,spans)] ) #for debugging
 
-    return sentences, outputs, spans
+            while (arg1 in t_ids) and (arg2 in t_ids) and not (curr_interaction == len(interactions)):
+
+                curr_interaction = curr_interaction + 1
+                interaction_ids[j].append((type_,t_ids[arg1],t_ids[arg2]))
+
+                if (curr_interaction == len(interactions)):
+
+                    break
+
+                _,type_,arg1,arg2 = interactions[curr_interaction]
+            
+            j += 1
+        
+        if labels_found < len(entities):
+            
+            #TODO: try to solve the missing entities/missing interactions problem
+            #has to do with incorrectly split tokens
+            #some entities are included as part of a (non entity word-entity word) token so
+            #the beginning span does not line with any token span. This should be fixed 
+            #with
+            #if (token_idx >= curr_start) and (token_idx <= curr_end) and not (started):
+            #other tokens include two entities ie entity1-entity2, so that token gets tagged
+            #as the first entity. In one case, there is an interaction between those 2 entities
+            #which cannot get picked up
+            pass
+    return sentences,total_labels,interaction_ids, tot_spans
 
 def write_formatted(sentences,labels,file_,extra_cols = None, start_sent = 0, sep = "\t", **kwargs):
 

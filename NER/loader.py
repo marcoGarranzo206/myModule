@@ -2,7 +2,7 @@ import en_core_web_sm
 from collections import defaultdict
 from itertools import groupby
 from myModule.functions import full_listdir
-from myModule.evaluate_DDI_2 import extract_DDI_corpus
+from myModule.evaluate_DDI import extract_DDI_corpus
 nlp = en_core_web_sm.load()
 import tokenizations
 import numpy as np

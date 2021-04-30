@@ -77,6 +77,15 @@ class ontology:
                 for s in syn:
 
                     self.Synonyms_Id[s] = id_
+    
+    def __getitem__(self, term):
+
+        Id = self.Synonyms_Id[term]
+        return self.Names_Id.inverse[Id]
+
+    def norm(self,term):
+
+        return self.__getitem__(term)
 
     def get_leaves(self,synonym = True):
         

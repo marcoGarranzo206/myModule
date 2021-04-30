@@ -1,18 +1,34 @@
 from nltk import pos_tag
 from nltk.stem import snowball, WordNetLemmatizer
-lemmatizer = WordNetLemmatizer()
 stemmer = snowball.EnglishStemmer()
 import re
 import sys
 from myModule import extraPrograms
 from myModule.objects import bidict
 import numpy as np
+from nltk import wordnet
+from nltk.tokenize import word_tokenize
+wordnet = wordnet.wordnet
 
 nltk_pos = ['LS', 'TO', 'VBN', "''", 'WP', 'UH', 'VBG', 'JJ', 'VBZ', '--', 'VBP', 'NN', 'DT', 'PRP', ':', 'WP$', 'NNPS', 'PRP$', 'WDT', '(', ')', '.', ',', '``', '$', 'RB', 'RBR', 'RBS', 'VBD', 'IN', 'FW', 'RP', 'JJR', 'JJS', 'PDT', 'MD', 'VB', 'WRB', 'NNP', 'EX', 'NNS', 'SYM', 'CC', 'CD', 'POS', '#']
 pos2idx = bidict({pos:i for (i,pos) in enumerate(nltk_pos)})
 
 bioLemma = r"/media/marco/TOSHIBA\ EXT/programs/NLP/biolemmatizer-1.2/"
 
+def word_tokenize_sents(sents):
+    
+    return [word_tokenize(sent) for sent in sents]
+
+class WordNetLemmatizerFromNLTK(WordNetLemmatizer):
+
+    def lemmatize(self, word, pos = 'n'):
+
+        pos = get_wordnet_pos(pos)
+        return super().lemmatize(word,pos)
+
+    def lemma_sent(self, tokens):
+
+        return [[ self.lemmatize(w, p) for w,p in pos_tag(token)] for token in tokens]
 
 def Case(sentences):
     
@@ -30,11 +46,6 @@ def get_wordnet_pos(treebank_tag):
         return wordnet.ADV
     else:
         return wordnet.NOUN
-
-def nltk_lemmatizer(sentences):
-    
-    return [[lemmatizer.lemmatize(token, get_wordnet_pos(token_pos)) for token,token_pos in token_pos_list] \
-            for token_pos_list in sentences ]
 
 def bio_lemmatize(sentences):
 

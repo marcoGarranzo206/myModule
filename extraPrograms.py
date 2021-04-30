@@ -1,3 +1,4 @@
+from subprocess import PIPE
 import subprocess
 from time import time
 import os
@@ -24,7 +25,7 @@ def chemTok(sentence, path ,direc = "/tmp/",remove_file = True):
 
         command = ["java", "-jar", path + "chemtok-1.0.1.jar"]
         #print(command)
-        result = subprocess.run(command,stdin = f, capture_output=True)
+        result = subprocess.run(command,stdin = f,stdout=PIPE, stderr=PIPE)
 
     if remove_file:
 
@@ -106,7 +107,7 @@ def bioLemmatizer(list_of_tokens, path,direc = "/tmp/",remove_files = True):
             -Dexec.mainClass="edu.ucdenver.ccp.nlp.biolemmatizer.BioLemmatizer"\
             -Dexec.args="-i {input_file_name} -o {output_file_name} -l"')
 
-        result = subprocess.run(["bash", command_file], capture_output=True)
+        result = subprocess.run(["bash", command_file], stdout=PIPE, stderr=PIPE)
 
         with open(logFile, "w+") as f:
 

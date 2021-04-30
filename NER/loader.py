@@ -1,12 +1,42 @@
+import warnings
 import en_core_web_sm
 from collections import defaultdict
 from itertools import groupby
 from myModule.functions import full_listdir
-from myModule.evaluate_DDI import extract_DDI_corpus
+from myModule.evaluate_DDI import extract_BRAT_corpus
 nlp = en_core_web_sm.load()
 import tokenizations
 import numpy as np
 
+
+def put_back(token_list,span):
+
+    """
+    given a list of tokens and their spans in the text
+    reconstruct text so adjacent tokens are as separated by as many 
+    whitespaces as indicated by spans, and spans are the new
+    absolute spans
+    """
+
+    if len(token_list) == 1:
+
+        return token_list[0], span
+
+    offset = [end[0] -start[1] for (start,end) in zip(span[:-1], span[1:])] + [0]
+    new_spans = [None for _ in range(len(span))]
+    mod_tokens = [None for _ in range(len(token_list)*2)]
+    start = 0
+
+    for i,(token,off) in enumerate(zip(token_list,offset)):
+
+        end = start + len(token)
+        mod_tokens[2*i] = token
+        mod_tokens[2*i + 1] = " "*off
+        new_spans[i] = (start,end)
+        start = end + off
+
+    return "".join(mod_tokens), new_spans
+    
 def safe_tokenize(token_list):
 
 
@@ -23,7 +53,7 @@ def tokenize_span(text,sentence_tokenizer,word_tokenizer):
 
     tokenizes the text into sentences and then each sentence into tokens
 
-    returns a list of list of tokens and a list of list of spans
+    returns a list of list of tokens and a list of list of spans of those tokens and the sentences
 
     word_tokenizer: tokenizes list of sentences. returns list of list of tokens
     """
@@ -90,7 +120,7 @@ def tokenize_span(text,sentence_tokenizer,word_tokenizer):
             
             spans[i][w] = (spans[i][w][0] + lengths[i-1], spans[i][w][1] + lengths[i-1]) 
         
-    return tokens,spans
+    return tokens,spans,so_helper
 
 def projectionDDI(x):
 
@@ -113,9 +143,10 @@ def groupDatasets(x, projection):
     return x
 
 
-def tokenize_DDICorpus(text,outputs, sentence_tokenizer, word_tokenizer):
+def tokenize_BRATCorpus(text,outputs, sentence_tokenizer, word_tokenizer):
     
     """
+    TODO: labelling strict vs loose?
     entities: list of tuples:
     
         (id,start index, end index, NER type)
@@ -128,9 +159,10 @@ def tokenize_DDICorpus(text,outputs, sentence_tokenizer, word_tokenizer):
 
         (tokenized sentences, labels, spans, tid_loc ) 
         TODO: explain outputs
+        IMP: assumes output labels are sorted based on beginning position and non-overlapping!
     """
     
-    docs,spans = tokenize_span(text, sentence_tokenizer,word_tokenizer)
+    docs,spans,_ = tokenize_span(text, sentence_tokenizer,word_tokenizer)
     if not outputs:
         for sentence,span in zip(docs,spans):
               
@@ -158,13 +190,14 @@ def tokenize_DDICorpus(text,outputs, sentence_tokenizer, word_tokenizer):
                     curr_label_idx += 1
                     tid, curr_label, name, curr_start, curr_end = outputs[min(curr_label_idx,len(outputs)-1)]
 
-                if (token_idx >= curr_start) and (token_idx <= curr_end) and not (started):
+                if ((token_idx >= curr_start) and (token_idx <= curr_end) or (curr_start < end <= curr_end))\
+                        and not (started):
 
                     started = True
                     tid_loc[tid] = i
                     labels[i] = f"B-{curr_label}:{tid}"
 
-                elif token_idx < curr_end and started:
+                elif token_idx <= curr_end and started:
 
                     labels[i] = f"I-{curr_label}:{tid}"
 
@@ -176,14 +209,15 @@ def tokenize_DDICorpus(text,outputs, sentence_tokenizer, word_tokenizer):
 
 def groupFiles(root, start_index = 0):
 
-    files = full_listdir(root)
+    files = [f for f in full_listdir(root) if (f.endswith(".ann") or f.endswith(".txt"))]
     files = files[start_index:]
     return groupDatasets(files, projectionDDI)
 
-def load_DDI(root,text_processor,sentence_tokenizer,word_tokenizer,start_index = 0):
+def load_BRAT(root,text_processor,sentence_tokenizer,word_tokenizer,start_index = 0):
 
     """
-    returns a generator of tokens,labels
+    returns a generator of tokens, token labels, entity interactions 
+    per document
     of a directory following the DDI corpus structure
     as indicated by root directory
 
@@ -191,44 +225,60 @@ def load_DDI(root,text_processor,sentence_tokenizer,word_tokenizer,start_index =
     """
 
     files = groupFiles(root, start_index)
-    sentences = []
+    doc_sentences = []
     total_labels = []
-    interaction_ids = defaultdict(list) #key: sentence idx. values: list of pair of ids
-    j = 0 # sentence index
+    interaction_ids = [] #defaultdict(list) #key: sentence idx. values: list of pair of ids
+    #j = 0 # sentence index
     inters = [] # for debugging. will be removed if problem is solved
     tot_spans = []
 
-    for doc_id, (text,entities,interactions) in enumerate(extract_DDI_corpus(files)):
+    for doc_id, (text,entities,interactions) in enumerate(extract_BRAT_corpus(files)):
         
+        if not all(entities[i][3] <= entities[i+1][3] for i in range(len(entities)-1)): #check if sorted
+
+            entities.sort(key = lambda k: k[3])
+
         text = text_processor(text)
         curr_interaction = 0
         labels_found = 0
         curr_sents = []
         curr_labels = []
         
+        interaction_ids.append(defaultdict(list))
+        doc_sentences.append([])
+        total_labels.append([])
+        tot_spans.append([])
+        inters.append(interactions)
+        
         if interactions:
-            
-            inters.append(interactions)
+      
+            #in case interactions arent sorted by appearance
+            #map entities to index pos
+            #sort interactions based on entitie pos of first entity
+            ent_id = {e[0]:e[3] for e in entities}
+            interactions.sort(key = lambda k: ent_id[k[2]])
             _,type_,arg1,arg2 = interactions[curr_interaction]
-            
+        
+
         else:
             
             type_,arg1,arg2 = "", "", ""
 
-        
-        for sents,labels,spans,t_ids in tokenize_DDICorpus(text, entities,sentence_tokenizer,\
+
+        j = 0
+        for sents,labels,spans,t_ids in tokenize_BRATCorpus(text, entities,sentence_tokenizer,\
                                         word_tokenizer):
 
             labels_found +=  sum([1 if label[0] == "B" else 0 for label in labels ])#for debugging
-            sentences.append(sents)
-            total_labels.append(labels)
-            tot_spans.append(spans)
+            doc_sentences[-1].append(sents)
+            total_labels[-1].append(labels)
+            tot_spans[-1].append(spans)
             #curr_sents.append( [ (t,l,s)for (t,l,s) in zip(sents, labels,spans)] ) #for debugging
 
             while (arg1 in t_ids) and (arg2 in t_ids) and not (curr_interaction == len(interactions)):
 
                 curr_interaction = curr_interaction + 1
-                interaction_ids[j].append((type_,t_ids[arg1],t_ids[arg2]))
+                interaction_ids[-1][j].append((type_,t_ids[arg1],t_ids[arg2]))
 
                 if (curr_interaction == len(interactions)):
 
@@ -249,8 +299,10 @@ def load_DDI(root,text_processor,sentence_tokenizer,word_tokenizer,start_index =
             #other tokens include two entities ie entity1-entity2, so that token gets tagged
             #as the first entity. In one case, there is an interaction between those 2 entities
             #which cannot get picked up
-            pass
-    return sentences,total_labels,interaction_ids, tot_spans
+            warnings.warn(f"{files[doc_id][0]} has {len(entities)} but found only {labels_found}")
+
+
+    return doc_sentences,total_labels,interaction_ids, tot_spans #,inters
 
 def write_formatted(sentences,labels,file_,extra_cols = None, start_sent = 0, sep = "\t", **kwargs):
 

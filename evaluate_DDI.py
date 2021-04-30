@@ -1,5 +1,5 @@
 from collections import defaultdict
-
+import warnings
 class oneClassNER_evaluator:
 
     """
@@ -75,7 +75,7 @@ class oneClassNER_evaluator:
 
         return self.not_in_doc.intersection(self.doc_terms)
 
-def extract_DDI_corpus(files):
+def extract_BRAT_corpus(files):
     
 
     for ann_file, text_file in files:
@@ -83,7 +83,7 @@ def extract_DDI_corpus(files):
         with open(text_file, "r+") as f:
 
             text = f.readlines()
-            text = "\n".join(text)
+            text = "".join(text)
 
         with open(ann_file, "r+") as f:
 
@@ -100,7 +100,10 @@ def extract_DDI_corpus(files):
 
                 if ann[0][0] != "T":
 
-                    R, Type_args = ann
+                    R, Type_args = ann[0:2]
+                    if len(ann) > 2:
+
+                        warnings.warn(f"Field with {len(ann)} columns found in annotation file. Skipping past column 2")
                     Type_args = Type_args.split(" ")
                     Type, arg1, arg2 = Type_args
                     arg1 = arg1.split(":")[1]

@@ -4,7 +4,7 @@ from .recursive_trees import Tree
 import torch
 from ..objects import bidict
 
-def load_trees(tree_file, word2vec_model,h_size, type_ = "LSTM"):
+def load_trees(tree_file, word2vec_model,h_size, type_ = "LSTM", embedding_dim = 200):
 
     """
     read a file of syntax trees in string format
@@ -21,9 +21,9 @@ def load_trees(tree_file, word2vec_model,h_size, type_ = "LSTM"):
         for i,line in enumerate(f):
         
 
-            t = ParentedTree.fromstring(line.split("\t")[10])
+            t = ParentedTree.fromstring(line[:-1])
             #print(t[(0,)])
-            trees.append(nltk_to_dgl(t,word2vec_model,h_size, type_ = type_))
+            trees.append(nltk_to_dgl(t,word2vec_model,h_size, type_ = type_, embedding_dim = embedding_dim))
             labels.append(t.label().split("/")[0])
 
     return trees,labels
@@ -52,7 +52,7 @@ def makeEntPositMat(givenInput):
     return position_embed[intInput]
 
 
-def node_to_tensor(node,tree,word_to_parents,vocab,unk_token = "UNK"):
+def node_to_tensor(node,tree,word_to_parents,vocab,unk_token = "UNK", embedding_dim = 200):
 
     label = tree[node].label()
     _, Fsc,Fd1,Fd2 = label.split("/")
@@ -72,11 +72,11 @@ def node_to_tensor(node,tree,word_to_parents,vocab,unk_token = "UNK"):
 
     else:
 
-        word_embedding = [0]*200#TODO: change to embedding size, will not always be 200
+        word_embedding = [0]*embedding_dim
 
     return torch.tensor(Fd1 + Fd2 + Fsc + [x for x in word_embedding],dtype=torch.float32)
 
-def nltk_to_dgl(tree,vocab,h_size,unk_token = "UNK",type_ = "LSTM"):
+def nltk_to_dgl(tree,vocab,h_size,unk_token = "UNK",type_ = "LSTM", embedding_dim = 200):
 
     """
     Given a list of ntltk trees labeled according to XXX, turn them into
@@ -113,7 +113,7 @@ def nltk_to_dgl(tree,vocab,h_size,unk_token = "UNK",type_ = "LSTM"):
     node_to_idx = dict()
     for node in non_leaf:
 
-        tensor = node_to_tensor(node,tree,word_to_parents,vocab,unk_token)
+        tensor = node_to_tensor(node,tree,word_to_parents,vocab,unk_token, embedding_dim)
         #print(tensor.shape)
         node_to_idx[node] = dgl_tree.add_node(parent_id= None, tensor=tensor)
 

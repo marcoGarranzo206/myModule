@@ -8,12 +8,15 @@ from myModule.objects import bidict
 import numpy as np
 from nltk import wordnet
 from nltk.tokenize import word_tokenize
+from chemtok import ChemTokeniser
 wordnet = wordnet.wordnet
 
 nltk_pos = ['LS', 'TO', 'VBN', "''", 'WP', 'UH', 'VBG', 'JJ', 'VBZ', '--', 'VBP', 'NN', 'DT', 'PRP', ':', 'WP$', 'NNPS', 'PRP$', 'WDT', '(', ')', '.', ',', '``', '$', 'RB', 'RBR', 'RBS', 'VBD', 'IN', 'FW', 'RP', 'JJR', 'JJS', 'PDT', 'MD', 'VB', 'WRB', 'NNP', 'EX', 'NNS', 'SYM', 'CC', 'CD', 'POS', '#']
 pos2idx = bidict({pos:i for (i,pos) in enumerate(nltk_pos)})
 
-bioLemma = r"/media/marco/TOSHIBA\ EXT/programs/NLP/biolemmatizer-1.2/"
+def chemtok_sents(sents, **kwargs):
+
+    return [ChemTokeniser(sent, **kwargs).getTokenStringList() for sent in sents]
 
 def word_tokenize_sents(sents):
     
@@ -47,7 +50,7 @@ def get_wordnet_pos(treebank_tag):
     else:
         return wordnet.NOUN
 
-def bio_lemmatize(sentences):
+def bio_lemmatize(sentences,bioLemma):
 
     lemmatized_tokens = extraPrograms.bioLemmatizer(sentences, bioLemma)
     return [[token[0] for token in sentence ] for sentence in lemmatized_tokens ]

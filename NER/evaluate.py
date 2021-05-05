@@ -3,7 +3,7 @@ from nervaluate import nervaluate as NEV
 
 def eval_results(truth,pred):
 
-    entities = list(set(t for sent in truth for t in sent if t != "O"))
+    entities = list(set(t[2:] for sent in truth for t in sent if t != "O"))
     metrics_results = {'correct': 0, 'incorrect': 0, 'partial': 0,
                        'missed': 0, 'spurious': 0, 'possible': 0, 'actual': 0,
                        'f1': 0,'precision': 0, 'recall': 0}
@@ -38,7 +38,7 @@ def eval_results(truth,pred):
 
         # aggregate results by entity type
 
-        for e_type in ['']:
+        for e_type in entities:
 
             for eval_schema in tmp_agg_results[e_type]:
 

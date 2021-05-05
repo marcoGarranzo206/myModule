@@ -3,9 +3,7 @@ from collections import defaultdict
 from numpy.random import binomial, choice, randint
 from ..NER.utils import get_entity_tags
 
-#TODO: mention replacement
 #all methods
-#TODO: synonym replacemnt: are there multiword tokens?
 #TODO: separate by pos for LwTR and synonyms?
 
 def get_entities(labels,sents):

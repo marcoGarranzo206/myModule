@@ -1,5 +1,28 @@
 import re
 from ..objects import bidict
+import numpy as np
+
+def check_sentence_lengths(X,Y, name = ""):
+    
+    """
+    sanity check after any processing at the token level
+    checks whether a list of sentences (list of list of tokens)
+    match in dimensions: ie same number of sentences, same sentence length
+    for all sentences
+    
+    Importan for ex in seq2seq tasks: make sure each training token
+    has a label
+    """
+    if len(X) != len(Y):
+        
+        raise ValueError(f"Different sentence length in {name}")
+        
+    lengths = np.array(list(map(len,X))) != np.array(list(map(len,Y)))
+    
+    if np.sum(lengths) != 0:
+        
+        w = np.where(lengths)
+        raise ValueError(f"Sentence lengths do not match in {name}: different in {w}")
 
 def anonymize(text,spans, anonymize):
 

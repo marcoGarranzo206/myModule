@@ -8,6 +8,19 @@ import gensim
 from .utils import check_sentence_lengths
 from sklearn.metrics import f1_score
 import numpy as np
+from collections import Counter
+
+def f1_scores(truth,pred):
+
+    """
+    prints macro and micro scores, returns macro f1
+    """
+
+    macro = f1_score(truth, pred, average="macro" )
+    micro = f1_score(truth, pred, average="micro" )
+    print(f"macro f1: {macro}")
+    print(f"micro f1: {micro}")
+    return macro
 
 class BiLSTM_embeddings(nn.Module):
     
@@ -194,6 +207,7 @@ class char_BiLSTM(nn.Module):
 
     def predict(self,x, extra_features = None):
 
+        self.eval()
         out, mask = self.forward(x, extra_features, train = False)
         return self.crf.decode(out, mask)
     
@@ -205,32 +219,31 @@ class char_BiLSTM(nn.Module):
               Y_train,
               Y_valid,
               n_epochs,
-              lr,
-              weight_decay,
               gradient_clipping,
-             batch_size,
-             betas = (0.9,0.999),
-             eps = 1e-08,
-             amsgrad = False):
+              batch_size,
+              weighted = False,
+              optimizer = optim.Adam,
+              optimizer_kwargs = {},
+              eval_criteria = f1_scores):
         
+
         check_sentence_lengths(train_sents, train_extra, "train sentences and train features")
         check_sentence_lengths(train_sents, Y_train, "train sentences and train tags")
         
         check_sentence_lengths(valid_sents, valid_extra, "valid sentences and valid features")
         check_sentence_lengths(valid_sents, Y_valid, "valid sentences and valid tags")
         
+        unraveled_Y_train = [t for sent in Y_train for t in sent]
+        unraveled_Y_valid = [t for sent in Y_valid for t in sent]
         #make batches with similar sized sentences. Avoid
         #exesive padding when putting short with long sentences
         idxs = np.argsort(list(map(len,train_sents ))) 
         
-        #TODO: let optimizer be passed, along with its **kwargs?
-        optimizer = optim.Adam(self.parameters(), 
-                               lr = lr,
-                               weight_decay = weight_decay,
-                               betas = betas,
-                               eps = eps,
-                              amsgrad = amsgrad)
+        if weighted:
+
+            class2weight = {k:1/v for k,v in Counter([t for sent in Y_train for t in sent]).items()}
         
+        optimizer = optim.Adam(self.parameters(),**optimizer_kwargs) 
         #TODO:early stopping after validation score doesnt increase/decreases?
         for i in range(n_epochs):
 
@@ -245,7 +258,14 @@ class char_BiLSTM(nn.Module):
                                        batch_first=True)
 
                 out,mask = self.forward(sentences,extra)
-                loss = - self.crf(out,outputs,mask)
+                
+                if weighted:
+
+                    weights = torch.tensor([[class2weight[c.item()] for c in sent] 
+                                    for sent in outputs]).unsqueeze(2).repeat(1, 1,len(class2weight) )
+                    loss = weights*out
+
+                loss = -self.crf(out,outputs,mask)
                 loss.backward()       
 
                 torch.nn.utils.clip_grad_norm_(self.parameters(), 
@@ -266,17 +286,88 @@ class char_BiLSTM(nn.Module):
 
                 yhat_valid.extend( self.predict([sents],[features])[0] )
 
-            #TODO: custom evaluation score? receive unfolded list of entities?unroll once and save it as a variable
-            macro_train = f1_score([t for sent in Y_train for t in sent],yhat_train, average="macro" )
-            micro_train = f1_score([t for sent in Y_train for t in sent],yhat_train, average="micro" )
-
-            macro_valid = f1_score([t for sent in Y_valid for t in sent],yhat_valid, average="macro" )
-            micro_valid = f1_score([t for sent in Y_valid for t in sent],yhat_valid, average="micro" )
-            
+        
             print(f"epoch: {i + 1}")
-            print(f"f1 macro train: {macro_train}")
-            print(f"f1 micro train: {micro_train}")
-            print(f"f1 macro valid: {macro_valid}")
-            print(f"f1 micro valid: {micro_valid}")
-            
-        return macro_valid, micro_valid
+            print("Training:")
+            eval_criteria(unraveled_Y_train, yhat_train)
+            print("Validation:")
+            eval_criteria(unraveled_Y_valid, yhat_valid)
+
+        return eval_criteria(unraveled_Y_valid, yhat_valid)
+
+class cbilstm_extra_features:
+    
+    def __init__(self,feature_extractor,
+                 num_classes,
+                 num_embeddings_chars,
+                 embedding_dim_chars,
+                 num_layers_chars,
+                 hidden_size_tokens,
+                 num_layers,
+                 vocab,
+                 char_vocab,
+                 hidden_size_chars = None,
+                 embedding_dim_tokens = None,
+                 embedding_dim_path = None,
+                 embedding_kwargs = {},
+                 bilstm_kwargs = {},
+                 freeze = False,
+                dropout = 0.5):
+        
+        self.feature_extractor = feature_extractor
+        n_extra = max(feature_extractor.features.values()) + 1
+        self.cbilstm = char_BiLSTM(num_classes,\
+                 num_embeddings_chars,\
+                 embedding_dim_chars,\
+                 num_layers_chars,\
+                 hidden_size_tokens,\
+                 num_layers,\
+                 vocab,\
+                 char_vocab,\
+                 extra_token_attributes = n_extra,\
+                 hidden_size_chars = hidden_size_chars,\
+                 embedding_dim_tokens = embedding_dim_tokens,\
+                 embedding_dim_path = embedding_dim_path,\
+                 embedding_kwargs = embedding_kwargs,\
+                 bilstm_kwargs = embedding_kwargs,\
+                 freeze = bilstm_kwargs,\
+                dropout = dropout)
+        
+    def forward(self, sents):
+        
+        extra_features = [torch.tensor(sent) for sent in self.feature_extractor(sents)]
+        return self.cbilstm.forward(sents, extra_features)
+        
+    def predict(self, sents):
+        
+        extra_features = [torch.tensor(sent) for sent in self.feature_extractor(sents)]
+        return self.cbilstm.predict(sents, extra_features)
+    
+    def fit(self,
+              train_sents,
+              valid_sents,
+              Y_train,
+              Y_valid,
+              n_epochs,
+              gradient_clipping,
+              batch_size,
+              weighted = False,
+              optimizer = optim.Adam,
+              optimizer_kwargs = {},
+              eval_criteria = f1_scores):
+        
+        train_extra = [torch.tensor(sent) for sent in self.feature_extractor(train_sents)]
+        valid_extra = [torch.tensor(sent) for sent in self.feature_extractor(valid_sents)]
+        return self.cbilstm.fit(train_sents,
+              train_extra,
+              valid_sents,
+              valid_extra,
+              Y_train,
+              Y_valid,
+              n_epochs,
+              gradient_clipping,
+              batch_size,
+              weighted = weighted,
+              optimizer = optimizer,
+              optimizer_kwargs = optimizer_kwargs,
+              eval_criteria = eval_criteria)

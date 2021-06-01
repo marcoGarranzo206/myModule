@@ -98,7 +98,7 @@ def extract_BRAT_corpus(files):
 
         for i,ann in enumerate(annotations):
 
-                if ann[0][0] != "T":
+                if ann[0][0] == "R":
 
                     R, Type_args = ann[0:2]
                     if len(ann) > 2:
@@ -109,21 +109,21 @@ def extract_BRAT_corpus(files):
                     arg1 = arg1.split(":")[1]
                     arg2 = arg2.split(":")[1]
                     interactions.append((R,Type, arg1, arg2))
-                    continue
 
+                elif ann[0][0] == "T":
 
-                T, G_span, term = ann
-                splitted = G_span.split(";")
+                    T, G_span, term = ann
+                    splitted = G_span.split(";")
 
-                group, start,end = splitted[0].split(" ")
-                start,end = int(start), int(end)
-                entities.append((T,group,term,start,end))
-
-                for span in splitted[1:]:
-
-                    span = span.split(" ")
+                    group, start,end = splitted[0].split(" ")
                     start,end = int(start), int(end)
                     entities.append((T,group,term,start,end))
+
+                    for span in splitted[1:]:
+
+                        span = span.split(" ")
+                        start,end = int(start), int(end)
+                        entities.append((T,group,term,start,end))
    
         yield text, entities, interactions
 

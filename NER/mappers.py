@@ -1,6 +1,7 @@
 from myModule.objects import bidict
+import abc
 
-class mapper:
+class mapper(abc.ABC):
     
     """
 
@@ -47,6 +48,10 @@ class mapper:
         self.pad = i
         self.unk = i + 1
     
+    @abc.abstractmethod
+    def __getitem__(self,sequence):
+
+        pass
 
 class char_mapper(mapper):
     

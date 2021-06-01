@@ -46,7 +46,7 @@ def safe_tokenize(token_list):
 
     return [safe_dict[t] if t in safe_dict else t for t in token_list]
 
-def tokenize_span(text,sentence_tokenizer,word_tokenizer):
+def tokenize_span(text,sentence_tokenizer,word_tokenizer,word_normalizer):
     """
     tokenize a text and return the tokens as well as their span (start,end) in the
     original text
@@ -64,7 +64,7 @@ def tokenize_span(text,sentence_tokenizer,word_tokenizer):
     sentence_offset = np.array([so_helper[i+1][0] - so_helper[i][1] for i in range(len(so_helper) - 1) ] + [0])
     #print(sentence_offset)
     
-    tokens = word_tokenizer(sentences)
+    tokens = word_normalizer(word_tokenizer(sentences))
     safe_tokenized = [safe_tokenize(token_list) for token_list in tokens]
     lengths = np.array(list(map(len, sentences))) + sentence_offset
     lengths = np.cumsum(lengths)
@@ -143,7 +143,7 @@ def groupDatasets(x, projection):
     return x
 
 
-def tokenize_BRATCorpus(text,outputs, sentence_tokenizer, word_tokenizer):
+def tokenize_BRATCorpus(text,outputs, sentence_tokenizer, word_tokenizer, word_normalizer):
     
     """
     TODO: labelling strict vs loose?
@@ -162,7 +162,7 @@ def tokenize_BRATCorpus(text,outputs, sentence_tokenizer, word_tokenizer):
         IMP: assumes output labels are sorted based on beginning position and non-overlapping!
     """
     
-    docs,spans,_ = tokenize_span(text, sentence_tokenizer,word_tokenizer)
+    docs,spans,_ = tokenize_span(text, sentence_tokenizer,word_tokenizer,word_normalizer)
     if not outputs:
         for sentence,span in zip(docs,spans):
               
@@ -213,7 +213,7 @@ def groupFiles(root, start_index = 0):
     files = files[start_index:]
     return groupDatasets(files, projectionDDI)
 
-def load_BRAT(root,text_processor,sentence_tokenizer,word_tokenizer,start_index = 0):
+def load_BRAT(root,text_processor,sentence_tokenizer,word_tokenizer,word_normalizer = lambda x: x, start_index = 0):
 
     """
     returns a generator of tokens, token labels, entity interactions 
@@ -267,7 +267,7 @@ def load_BRAT(root,text_processor,sentence_tokenizer,word_tokenizer,start_index 
 
         j = 0
         for sents,labels,spans,t_ids in tokenize_BRATCorpus(text, entities,sentence_tokenizer,\
-                                        word_tokenizer):
+                                        word_tokenizer,word_normalizer):
 
             labels_found +=  sum([1 if label[0] == "B" else 0 for label in labels ])#for debugging
             doc_sentences[-1].append(sents)

@@ -142,7 +142,6 @@ class data_augmentator:
                 label = get_entity_tags(labels)
                 n = binomial(n = 1,size = len(label), p = p)
                 label = [l for l,t in zip(label,n) if t]
-
                 if not label:
 
                     augmented_toks[j] = sentence

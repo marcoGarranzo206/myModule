@@ -1,5 +1,5 @@
 from nltk import pos_tag
-from nltk.stem import snowball, WordNetLemmatizer
+from nltk.stem import snowball, WordNetLemmatizer,PorterStemmer, SnowballStemmer
 stemmer = snowball.EnglishStemmer()
 import re
 import sys
@@ -14,9 +14,15 @@ wordnet = wordnet.wordnet
 nltk_pos = ['LS', 'TO', 'VBN', "''", 'WP', 'UH', 'VBG', 'JJ', 'VBZ', '--', 'VBP', 'NN', 'DT', 'PRP', ':', 'WP$', 'NNPS', 'PRP$', 'WDT', '(', ')', '.', ',', '``', '$', 'RB', 'RBR', 'RBS', 'VBD', 'IN', 'FW', 'RP', 'JJR', 'JJS', 'PDT', 'MD', 'VB', 'WRB', 'NNP', 'EX', 'NNS', 'SYM', 'CC', 'CD', 'POS', '#']
 pos2idx = bidict({pos:i for (i,pos) in enumerate(nltk_pos)})
 
-def chemtok_sents(sents, **kwargs):
+class chemtok:
 
-    return [ChemTokeniser(sent, **kwargs).getTokenStringList() for sent in sents]
+    def __init__(self, kwargs = {}):
+
+        self.kwargs = kwargs
+
+    def __call__(self,sents):
+
+        return [ChemTokeniser(sent, **self.kwargs).getTokenStringList() for sent in sents]
 
 def word_tokenize_sents(sents):
     
@@ -32,6 +38,22 @@ class WordNetLemmatizerFromNLTK(WordNetLemmatizer):
     def lemma_sent(self, tokens):
 
         return [[ self.lemmatize(w, p) for w,p in pos_tag(token)] for token in tokens]
+    
+    def __call__(self,tokens):
+
+        return self.lemma_sent(tokens)
+
+class stem(PorterStemmer):
+
+    def __call__(self, sents):
+
+        return [[self.stem(token) for token in sent] for sent in sents]
+
+class snowball(SnowballStemmer):
+
+    def __call__(self, sents):
+
+        return [[self.stem(token) for token in sent] for sent in sents]
 
 def Case(sentences):
     

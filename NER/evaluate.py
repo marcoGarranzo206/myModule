@@ -17,7 +17,7 @@ def eval_results(truth,pred):
 
 
     # results aggregated by entity type
-    evaluation_agg_entities_type = {e: deepcopy(results) for e in ['']}
+    evaluation_agg_entities_type = {e: deepcopy(results) for e in entities}
 
     for true_ents, pred_ents in zip(truth, pred):
 
